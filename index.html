@@ -54,11 +54,11 @@
         map.on('load', async () => {
             
             try {
-                const imageH = await map.loadImage('hondelatte.png');
-                const imageL = await map.loadImage('lantieri.png');
+                const imageH = await map.loadImage('resources/hondelatte.png');
+                const imageL = await map.loadImage('resources/lantieri.png');
 
-                const imageM = await map.loadImage('mbarki.png');
-                const imageD = await map.loadImage('delay.png');
+                const imageM = await map.loadImage('resources/mbarki.png');
+                const imageD = await map.loadImage('resources/delay.png');
 
                 map.addImage('hondelatte', imageH.data);
                 map.addImage('lantieri', imageL.data);
@@ -69,7 +69,7 @@
 
                 map.addSource('heatmap-data', {
                     'type': 'geojson',
-                    'data': 'fela2.geojson'
+                    'data': 'resources/fela.geojson'
                 });
 
                 map.addLayer({
