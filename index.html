@@ -2,12 +2,14 @@
 <html lang="en">
 
 <head>
-    <title>La FELAcarte</title>
+    <title>La FELAcarte with Deck.gl Arcs</title>
     <meta property="og:description" content="La FELAcarte" />
     <meta charset='utf-8'>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel='stylesheet' href='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.css' />
     <script src='https://unpkg.com/maplibre-gl@5.6.1/dist/maplibre-gl.js'></script>
+    <script src="https://unpkg.com/deck.gl@8.9.30/dist.min.js"></script>
+    <script src="https://unpkg.com/@deck.gl/maplibre@8.9.30/dist.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -26,6 +28,7 @@
             font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
             overflow-y: auto;
         }
+
         .maplibregl-popup-content hr {
             border: 0;
             height: 1px;
@@ -47,29 +50,54 @@
         const map = new maplibregl.Map({
             container: 'map',
             style: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-            center: [4, 51],
-            zoom: 3
+            center: [2.36, 46.29],
+            zoom: 5.1
         });
+        
+        function createArcData(multiPointCoords) {
+            const arcData = [];
+            if (multiPointCoords.length < 2) {
+                return arcData;
+            }
+            // @nuayge NOTE: Origin seem to not always be the first point 🤨 
+            const origin = multiPointCoords[0];
+            for (let i = 1; i < multiPointCoords.length; i++) {
+                const dest = multiPointCoords[i];
+                arcData.push({
+                    from: origin,
+                    to: dest
+                });
+            }
+            return arcData;
+        }
+
 
         map.on('load', async () => {
-            
+            let felaData;
+            const deckOverlay = new deck.MapboxOverlay({
+                layers: []
+            });
+            map.addControl(deckOverlay);
+
+
+            const felaGeoJson = await fetch('resources/fela.geojson');
+            felaData = await felaGeoJson.json();
+
             try {
                 const imageH = await map.loadImage('resources/hondelatte.png');
                 const imageL = await map.loadImage('resources/lantieri.png');
-
                 const imageM = await map.loadImage('resources/mbarki.png');
                 const imageD = await map.loadImage('resources/delay.png');
 
                 map.addImage('hondelatte', imageH.data);
                 map.addImage('lantieri', imageL.data);
-
                 map.addImage('mbarki', imageM.data);
                 map.addImage('delay', imageD.data);
 
 
                 map.addSource('heatmap-data', {
                     'type': 'geojson',
-                    'data': 'resources/fela.geojson'
+                    'data': felaData
                 });
 
                 map.addLayer({
@@ -78,26 +106,15 @@
                     'source': 'heatmap-data',
                     'maxzoom': 9,
                     'paint': {
-                        'heatmap-weight': [
-                            'interpolate', ['linear'],
-                            ['get', 'mag'],
-                            0, 0,
-                            6, 1
-                        ],
-                        'heatmap-intensity': [
-                            'interpolate', ['linear'],
-                            ['zoom'],
-                            0, 1,
-                            9, 5
-                        ],
                         'heatmap-color': [
                             'interpolate', ['linear'],
                             ['heatmap-density'],
                             0, 'rgba(0, 255, 0, 0)',
                             0.2, 'green',
-                            0.4, 'yellow',
-                            0.6, 'orange',
-                            0.8, 'red'
+                            0.7, 'yellow',
+                            0.8, 'orange',
+                            0.85, 'red',
+                            1.0, 'darkred'
                         ],
                         'heatmap-radius': [
                             'interpolate', ['linear'],
@@ -109,7 +126,7 @@
                             'interpolate', ['linear'],
                             ['zoom'],
                             7, 1,
-                            9, 0
+                            11, 0
                         ]
                     }
                 }, 'place_city_r6');
@@ -118,7 +135,7 @@
                     'id': 'fela-point',
                     'type': 'symbol',
                     'source': 'heatmap-data',
-                    'minzoom': 7,
+                    'minzoom': 4,
                     'layout': {
                         'icon-image': [
                             'match',
@@ -127,29 +144,35 @@
                             2, 'lantieri',
                             3, 'mbarki',
                             4, 'delay',
-                            'icon-default' 
+                            'icon-default'
                         ],
-                        'icon-size': 0.2,
+                        'icon-size': 0.15,
                         'icon-allow-overlap': true,
                         'icon-ignore-placement': true
+                    },
+                    'paint': {
+                        'icon-opacity': [
+                            'interpolate',
+                            ['linear'],
+                            ['zoom'],
+                            6, 0,
+                            7, 0.3,
+                            8, 0.8,
+                            10, 1
+                        ]
                     }
                 }, 'place_city_r6');
 
                 map.on('click', 'fela-point', (e) => {
-                    const feature = e.features[0];
-
-
-                    const place = e.features[0].properties.lieu;
-                    const title = e.features[0].properties.titre;
-
                     const htmlContent = e.features.map(feature => {
                         const place = feature.properties.lieu;
                         const title = feature.properties.titre;
                         const _id = feature.properties.id
 
-                        return `<div id=${_id}  class="feature-item">
+                        return `<div id=${_id} class="feature-item">
                                 <strong>Lieu:</strong> ${place}<br>
                                 <strong>Titre:</strong> ${title}<br>
+                                <a href=https://fela.fr/affaire/${_id} target="_blank">Lien sur fela.fr</a>
                         </div>`;
                     }).join('<hr>');
 
@@ -159,19 +182,47 @@
                         .addTo(map);
 
                     const popupElement = popup.getElement();
-
                     const featureItems = popupElement.querySelectorAll('.feature-item');
 
                     featureItems.forEach(item => {
                         item.addEventListener('mouseover', (event) => {
-                            console.log(`Hovered over item with ID: ${event.currentTarget.id}`);
                             event.currentTarget.style.backgroundColor = '#e9e9e9';
                         });
-
                         item.addEventListener('mouseout', (event) => {
-                            console.log(`Mouse left item with ID: ${event.currentTarget.id}`);
                             event.currentTarget.style.backgroundColor = 'transparent';
                         });
+
+                        item.addEventListener('click', (event) => {
+                            const featureId = event.currentTarget.id;
+                            const fullFeature = felaData.features.find(f => String(f.properties.id) === String(featureId));
+
+                            let layers = [];
+
+                            if (fullFeature && fullFeature.geometry.type === 'MultiPoint') {
+                                const coords = fullFeature.geometry.coordinates;
+                                const arcData = createArcData(coords);
+
+                                if (arcData.length > 0) {
+                                    layers.push(new deck.ArcLayer({
+                                        id: 'arc-layer',
+                                        data: arcData,
+                                        getSourcePosition: d => d.from,
+                                        getTargetPosition: d => d.to,
+                                        getSourceColor: [255, 0, 0],
+                                        getTargetColor: [200, 0, 0],
+                                        getWidth: 2,
+                                        getHeight: 0.4,
+                                        greatCircle: true,
+                                    }));
+                                }
+                            }
+
+                            deckOverlay.setProps({ layers: layers });
+                        });
+                    });
+
+                    popup.on('close', () => {
+                        deckOverlay.setProps({ layers: [] });
                     });
                 });
 
